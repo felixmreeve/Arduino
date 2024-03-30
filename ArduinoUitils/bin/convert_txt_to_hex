@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+import argparse
+
+
+def main(txt_path):
+    with open(txt_path) as f:
+        lines = f.readlines()
+    for line in lines:
+        print(line)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_arg("txt")
+    args = parser.parse_args()
+    main(args.txt)
