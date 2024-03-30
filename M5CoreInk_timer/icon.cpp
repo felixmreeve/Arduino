@@ -1,12 +1,17 @@
 #include "icon.h"
 
-image_t num18x29[11] = {
-    {18, 29, 1, image_num_29_01}, {18, 29, 1, image_num_29_02},
-    {18, 29, 1, image_num_29_03}, {18, 29, 1, image_num_29_04},
-    {18, 29, 1, image_num_29_05}, {18, 29, 1, image_num_29_06},
-    {18, 29, 1, image_num_29_07}, {18, 29, 1, image_num_29_08},
-    {18, 29, 1, image_num_29_09}, {18, 29, 1, image_num_29_10},
-    {18, 29, 1, image_num_29_11},
+unsigned char *num18x29[11] = {
+    image_num_29_00, 
+    image_num_29_01,
+    image_num_29_02,
+    image_num_29_03,
+    image_num_29_04,
+    image_num_29_05,
+    image_num_29_06,
+    image_num_29_07,
+    image_num_29_08,
+    image_num_29_09,
+    image_num_29_slash
 };
 
 const unsigned char pic_bin[] = {

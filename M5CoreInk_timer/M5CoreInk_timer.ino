@@ -110,9 +110,8 @@ void drawTomato(int posX, int posY) {
 
 void drawTime() {
   unsigned short minutesLeft = minutesTarget - minutesPassed;
-  minutesLeft = 27;
-  drawImage(10, 10, 18, 29, num18x29[minutesLeft / 10].ptr);
-  drawImage(10, 30, 18, 29, num18x29[minutesLeft % 10].ptr);
+  drawImage(10, 10, 18, 29, num18x29[minutesLeft / 10]);
+  drawImage(10, 30, 18, 29, num18x29[minutesLeft % 10]);
 }
 
 void pushDrawMenu() {
