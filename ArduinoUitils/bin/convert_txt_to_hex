@@ -1,15 +1,37 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
+import os
+
+def get_pixels(lines):
+    pixels = []
+    for line in lines:
+        for c in line:
+            if c == " ":
+                pixels.append(1)  # 1 for white
+            else:
+                pixels.append(0)  # 0 for black
+    return pixels
 
 
 def main(txt_path):
+    # grab txt from assets folder if it's not a full path
+    if not os.path.exists(txt_path):
+        project_dir = os.path.dirname(os.path.dirname(__file__))
+        asset_txt_path = os.path.join(project_dir, "assets", txt_path)
+        print(asset_txt_path)
+        if os.path.exists(asset_txt_path):
+            txt_path = asset_txt_path
+
     with open(txt_path) as f:
         lines = f.readlines()
-    for line in lines:
-        print(line)
+    
+    width = len(lines[0])
+    height = len(lines)
+    pixels = get_pixels(lines)
+    print(0xff)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_arg("txt")
+    parser.add_argument("txt")
     args = parser.parse_args()
     main(args.txt)
