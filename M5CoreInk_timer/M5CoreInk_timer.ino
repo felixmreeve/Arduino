@@ -18,7 +18,7 @@ char *stateStrings[] = {
   "MENU",
   "WORKING",
   "break",
-  "BREAK!"
+  "BREAK",
   "ERROR"
 };
 
@@ -90,7 +90,8 @@ void drawRect(uint16_t posX, uint16_t posY,
 }
 
 void drawChar(uint16_t posX, uint16_t posY, char charData,
-              Ink_eSPI_font_t *fontPtr) {
+              Ink_eSPI_font_t *fontPtr, 
+              uint8_t pixBit = 0, bool alpha = false) {
     charData -= 0x20;
     int _posX = posX + fontPtr->_height;
     for (int y = 0; y < fontPtr->_height; y++) {
@@ -99,9 +100,9 @@ void drawChar(uint16_t posX, uint16_t posY, char charData,
             if ((fontPtr->_fontptr[charData * fontPtr->_fontSize +
                                    (y * fontPtr->_width + x) / 8]) &
                 mark) {
-                InkPageSprite.drawPix(_posX - y, posY + x, 0);
-            } else {
-                InkPageSprite.drawPix(_posX - y, posY + x, 1);
+                InkPageSprite.drawPix(_posX - y, posY + x, pixBit);
+            } else if (!alpha) {
+                InkPageSprite.drawPix(_posX - y, posY + x, !pixBit);
             }
         }
     }
@@ -109,7 +110,8 @@ void drawChar(uint16_t posX, uint16_t posY, char charData,
 
 void drawString(uint16_t posX, uint16_t posY, const char *charData,
                 Ink_eSPI_font_t *fontPtr = &AsciiFont8x16,
-                bool border = false) {
+                uint8_t pixBit = 0,
+                bool boxBorder = false, bool textBorder = false) {
   int _posY;
   if (posX == uint16_t(-1)) {  // draw centre of screen
     posX = (InkPageSprite.width() - fontPtr->_height) / 2;
@@ -119,14 +121,21 @@ void drawString(uint16_t posX, uint16_t posY, const char *charData,
   }
   _posY = posY;
   while (*charData != '\0') {
-      drawChar(posX, _posY, *charData, fontPtr);
+      if (textBorder) {
+        drawChar(posX+1, _posY, *charData, fontPtr, !pixBit, true);
+        drawChar(posX-1, _posY, *charData, fontPtr, !pixBit, true);
+        drawChar(posX, _posY+1, *charData, fontPtr, !pixBit, true);
+        drawChar(posX, _posY-1, *charData, fontPtr, !pixBit, true);
+      }
+      // draw char with alpha only if there's a textBorder
+      drawChar(posX, _posY, *charData, fontPtr, pixBit, textBorder);
       _posY += fontPtr->_width;
       charData++;
   }
-  if (border) {
+  if (boxBorder) {
     drawRect(posX, posY, 
-              strLen(charData)*fontPtr->_width,
-              fontPtr->_height, 0);
+             strLen(charData)*fontPtr->_width,
+             fontPtr->_height, 0);
   }
 }
 
@@ -146,7 +155,9 @@ void drawTime() {
   char num[3] = "00";
   num[0] = '0' + minutesLeft / 10;
   num[1] = '0' + minutesLeft % 10;
-  drawString(32, -1, num, &AsciiFont24x48);
+  
+  // white text
+  drawString(34, -1, num, &AsciiFont24x48, 0);
 
   // draw line
   for (int i=100-percent; i<100+percent; i++) {
@@ -156,8 +167,9 @@ void drawTime() {
 }
 
 void pushDrawMenu() {
+  Serial.println("drawing menu");
   M5.M5Ink.clear();
-  delay(500);
+  delay(1000);
   drawTomato(((200-64)*3)/4, (200-64)/2);
   drawString(-1, -1, "PoMoDoRo", &AsciiFont24x48);
   drawString(40, -1, "MID:start task", &AsciiFont8x16);
@@ -167,6 +179,7 @@ void pushDrawMenu() {
 
 void pushDrawState() {
   char *currentStateString = stateStrings[currentState];
+  Serial.println("drawing state");
   InkPageSprite.FillRect(0,0,200,200,1);
   drawTomato(((200-64)*3)/4, (200-64)/2);
   drawString(-1, -1, currentStateString, &AsciiFont24x48);
@@ -178,9 +191,11 @@ void updateMenu() {
   if (M5.BtnPWR.wasPressed()) {
     // shut down
     M5.M5Ink.clear();
-    drawTomato((200-64)/2, (200-64)/2);
-    InkPageSprite.pushSprite();
     delay(1000);
+    drawTomato((200-64)/2, (200-64)/2);
+    delay(500);
+    InkPageSprite.pushSprite();
+    delay(2000);
     M5.shutdown();
   }
   if (M5.BtnMID.wasPressed()) {
@@ -200,7 +215,7 @@ void updateTime() {
     // purposely only record minute to avoid
     // unnecessary precision distraction
     minutesPassed = (timeNow - timeStart) / MINUTE_MILLIS;
-    delay(1000);
+    delay(500);
   }
   if (minutesPassed == minutesTarget) {
     // need state change
@@ -208,11 +223,11 @@ void updateTime() {
       case STATE_WORKING:
         iteration++;
         if (iteration > BREAK_LOOP) {
-          setState(STATE_BREAK_SHORT);
+          setState(STATE_BREAK_LONG);
           iteration = 0;
         }
         else {
-          setState(STATE_BREAK_LONG);
+          setState(STATE_BREAK_SHORT);
         }
         break;
       case STATE_BREAK_SHORT:
@@ -224,6 +239,8 @@ void updateTime() {
 }
 
 void setState(state newState) {
+  Serial.println("setting state to:");
+  Serial.println(stateStrings[newState]);
   currentState = newState;
   minutesTarget = stateMins[newState];
   minutesPassed = 0;
