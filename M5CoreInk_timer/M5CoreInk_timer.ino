@@ -24,9 +24,9 @@ char *stateStrings[] = {
 
 const unsigned long stateMins[] = {
   0, // MENU, not used
-  25, // WORKING
-  5, // BREAK_SHORT
-  20, // BREAK_LONG
+  2, // WORKING
+  1, // BREAK_SHORT
+  2, // BREAK_LONG
   0
 };
 
@@ -40,7 +40,7 @@ const unsigned int BREAK_LOOP = 4;
 unsigned long timeStart = 0;
 unsigned long minutesPassed = 0;
 unsigned long minutesTarget = 0;
-unsigned int iteration = 0;
+unsigned int breakIteration = 0;
 state currentState = STATE_ERROR;
 
 // create a global sprite object for screen functionality
@@ -159,11 +159,18 @@ void drawTime() {
   // white text
   drawString(34, -1, num, &AsciiFont24x48, 0);
 
-  // draw line
+  // draw line for loading bar
   for (int i=100-percent; i<100+percent; i++) {
     InkPageSprite.drawPix(32, i, 0);
   }
-  //InkPageSprite.FillRect(20, 100-percent, 5, percent*2, 0);
+}
+
+void drawBreakIterations() {
+  for (int i=0; i<BREAK_LOOP; i++) {
+    // draw representation of breaks
+    // and signify which break we're on
+
+  }
 }
 
 void pushDrawMenu() {
@@ -179,11 +186,12 @@ void pushDrawMenu() {
 
 void pushDrawState() {
   char *currentStateString = stateStrings[currentState];
-  Serial.println("drawing state");
+  Serial.printf("drawing state: %s\n", currentStateString);
   InkPageSprite.FillRect(0,0,200,200,1);
   drawTomato(((200-64)*3)/4, (200-64)/2);
   drawString(-1, -1, currentStateString, &AsciiFont24x48);
   drawTime();
+  drawBreakIterations();
   InkPageSprite.pushSprite();
 }
 
@@ -221,10 +229,10 @@ void updateTime() {
     // need state change
     switch (currentState) {
       case STATE_WORKING:
-        iteration++;
-        if (iteration > BREAK_LOOP) {
+        breakIteration++;
+        if (breakIteration > BREAK_LOOP) {
           setState(STATE_BREAK_LONG);
-          iteration = 0;
+          breakIteration = 0;
         }
         else {
           setState(STATE_BREAK_SHORT);
@@ -232,6 +240,7 @@ void updateTime() {
         break;
       case STATE_BREAK_SHORT:
       case STATE_BREAK_LONG:
+        setState(STATE_WORKING);
         break;
     }
   }
@@ -239,8 +248,7 @@ void updateTime() {
 }
 
 void setState(state newState) {
-  Serial.println("setting state to:");
-  Serial.println(stateStrings[newState]);
+  Serial.printf("setting state to: %s\n", stateStrings[newState]);
   currentState = newState;
   minutesTarget = stateMins[newState];
   minutesPassed = 0;
