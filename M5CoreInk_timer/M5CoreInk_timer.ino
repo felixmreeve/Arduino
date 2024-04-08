@@ -11,6 +11,7 @@ enum state {
   STATE_WORKING,
   STATE_BREAK_SHORT,
   STATE_BREAK_LONG,
+  STATE_INPUT,
   STATE_ERROR
 };
 
@@ -19,23 +20,27 @@ char *stateStrings[] = {
   "WORKING",
   "break",
   "BREAK",
+  "INPUT",
   "ERROR"
 };
 
 const unsigned long stateMins[] = {
   0, // MENU, not used
-  2, // WORKING
-  1, // BREAK_SHORT
-  2, // BREAK_LONG
-  0
+  25, // WORKING
+  5, // BREAK_SHORT
+  20, // BREAK_LONG
+  0, // INPUT
+  0 // ERROR
 };
 
 // can adjust number of seconds in a "minute" for testing
 const unsigned long MINUTE_SECONDS = 60;
-const unsigned long SHUTDOWN_SECONDS = MINUTE_SECONDS-1;
 const unsigned long MINUTE_MILLIS = 1000 * MINUTE_SECONDS;
-// iterations of short breaks before long break
+const unsigned long SHUTDOWN_SECONDS = MINUTE_MILLIS - 1000;
+// number of working sessions before long break
 const unsigned int BREAK_LOOP = 4;
+
+const unsigned long MENU_TIMEOUT_SECONDS = 60;
 
 unsigned long timeStart = 0;
 unsigned long minutesPassed = 0;
@@ -146,19 +151,14 @@ void drawTomato(int posX, int posY) {
 void drawTime() {
   unsigned long minutesLeft = minutesTarget - minutesPassed;
   int percent = (minutesLeft * 100) / minutesTarget;
-
   // pixel images
   //drawImage(InkPageSprite.width()/4 - 29/2, InkPageSprite.height()/2 - 18, 18, 29, num18x29[minutesLeft / 10]);
   //drawImage(InkPageSprite.width()/4 - 29/2, InkPageSprite.height()/2, 18, 29, num18x29[minutesLeft % 10]);
-  
   // font text
   char num[3] = "00";
   num[0] = '0' + minutesLeft / 10;
   num[1] = '0' + minutesLeft % 10;
-  
-  // white text
   drawString(34, -1, num, &AsciiFont24x48, 0);
-
   // draw line for loading bar
   for (int i=100-percent; i<100+percent; i++) {
     InkPageSprite.drawPix(32, i, 0);
@@ -175,16 +175,27 @@ void drawBreakIterations() {
 
 void pushDrawMenu() {
   Serial.println("drawing menu");
-  M5.M5Ink.clear();
-  delay(1000);
+  InkPageSprite.FillRect(0, 0, 200, 200, 1);
   drawTomato(((200-64)*3)/4, (200-64)/2);
   drawString(-1, -1, "PoMoDoRo", &AsciiFont24x48);
-  drawString(40, -1, "MID:start task", &AsciiFont8x16);
+  switch (getNextState()) {
+      case STATE_WORKING:
+        drawString(40, -1, "MID:start task", &AsciiFont8x16);
+        break;
+      case STATE_BREAK_SHORT:
+        drawString(40, -1, "MID:short break", &AsciiFont8x16);
+        break;
+      case STATE_BREAK_LONG:
+        drawString(40, -1, "MID:long break", &AsciiFont8x16);
+        break;
+      default:
+        drawString(40, -1, "UNKNOWN STATE", &AsciiFont8x16);
+  }
   drawString(20, -1, "DOWN:mode", &AsciiFont8x16);
   InkPageSprite.pushSprite();
 }
 
-void pushDrawState() {
+void pushDrawIteration() {
   char *currentStateString = stateStrings[currentState];
   Serial.printf("drawing state: %s\n", currentStateString);
   InkPageSprite.FillRect(0,0,200,200,1);
@@ -195,23 +206,52 @@ void pushDrawState() {
   InkPageSprite.pushSprite();
 }
 
-void updateMenu() {
-  if (M5.BtnPWR.wasPressed()) {
+void quit() {
     // shut down
     M5.M5Ink.clear();
-    delay(1000);
+    delay(2000);
+    InkPageSprite.FillRect(0, 0, 200, 200, 1);
     drawTomato((200-64)/2, (200-64)/2);
-    delay(500);
     InkPageSprite.pushSprite();
     delay(2000);
     M5.shutdown();
+}
+
+state getNextState() {
+  state nextState;
+  if (breakIteration % 2 == 0) {
+    nextState = STATE_WORKING;
   }
+  else if ((breakIteration/2 + 1) % BREAK_LOOP == 0) {
+    nextState = STATE_BREAK_LONG;
+  }
+  else {
+    nextState = STATE_BREAK_SHORT;
+  }
+  return nextState;
+}
+
+void setNextState() {
+  Serial.printf("next state after iteration: %d\n", breakIteration);
+  state nextState = getNextState();
+  setState(nextState);
+  breakIteration++;
+}
+
+void updateMenu() {
+  unsigned long timeNow = millis();
   if (M5.BtnMID.wasPressed()) {
-    // start work
     Serial.println("MID pressed");
-    timeStart = millis();
-    setState(STATE_WORKING);
-    pushDrawState();
+    setNextState();
+    pushDrawIteration();
+  }
+  if (M5.BtnDOWN.wasPressed()) {
+    setNextState();  // skip this state
+    setState(STATE_MENU);
+    pushDrawMenu();
+  }
+  if (M5.BtnPWR.wasPressed() || timeNow/1000 > MENU_TIMEOUT_SECONDS) {
+    quit();
   }
 }
 
@@ -226,25 +266,12 @@ void updateTime() {
     delay(500);
   }
   if (minutesPassed == minutesTarget) {
-    // need state change
-    switch (currentState) {
-      case STATE_WORKING:
-        breakIteration++;
-        if (breakIteration > BREAK_LOOP) {
-          setState(STATE_BREAK_LONG);
-          breakIteration = 0;
-        }
-        else {
-          setState(STATE_BREAK_SHORT);
-        }
-        break;
-      case STATE_BREAK_SHORT:
-      case STATE_BREAK_LONG:
-        setState(STATE_WORKING);
-        break;
-    }
+    setState(STATE_MENU);
+    pushDrawMenu();
   }
-  pushDrawState();
+  else {
+    pushDrawIteration();
+  }
 }
 
 void setState(state newState) {
@@ -269,12 +296,17 @@ void setup() {
       delay(2000);
       M5.shutdown();  // Turn off the power
   }
-
+  Serial.println("setup success");
+  Serial.flush();
+  M5.M5Ink.clear();
+  delay(1000);
   setState(STATE_MENU);
   pushDrawMenu();
 }
 
 void loop() {
+  Serial.println("loop");
+  Serial.println(stateStrings[currentState]);
   // put your main code here, to run repeatedly:
   switch (currentState) {
     case STATE_MENU:
@@ -284,9 +316,11 @@ void loop() {
     case STATE_WORKING:
     case STATE_BREAK_SHORT:
     case STATE_BREAK_LONG:
+      delay(SHUTDOWN_SECONDS);
       updateTime();
-      delay(MINUTE_MILLIS-1000);
       break;
+    default:
+      Serial.println("UNKNOWN STATE");
   }
   // check for buttons
   M5.update();
